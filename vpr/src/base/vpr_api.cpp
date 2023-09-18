@@ -559,6 +559,34 @@ void vpr_setup_noc_routing_algorithm(std::string noc_routing_algorithm_name) {
     return;
 }
 
+void dump_metis_file(t_vpr_setup& vpr_setup) {
+    const auto& atom_ctx = g_vpr_ctx.atom();
+    const auto& netlist = atom_ctx.nlist;
+    const std::string design_name = vpr_setup.FileNameOpts.CircuitName;
+    std::string hypergraph_file = design_name + ".logical_hypergraph.metis.txt";
+    std::string block_file = design_name + ".block_file.metis.txt";
+
+    std::ofstream hypergraph_fstream;
+    hypergraph_fstream.open(hypergraph_file);
+    hypergraph_fstream << netlist.nets().size() << " " << netlist.blocks().size() << std::endl;
+    
+    for (const AtomNetId& net : netlist.nets()) {
+        hypergraph_fstream << static_cast<size_t>(netlist.net_driver_block(net)) + 1 << " ";
+        for (const AtomPinId& sink : netlist.net_sinks(net)) {
+            hypergraph_fstream << static_cast<size_t>(netlist.pin_block(sink)) + 1 << " ";
+        }
+        hypergraph_fstream << "//" << netlist.net_name(net) << std::endl;
+    }
+    hypergraph_fstream.close();
+
+    std::ofstream block_fstream;
+    block_fstream.open(block_file);
+    for (const AtomBlockId& block : netlist.blocks()) {
+        // TODO: original code also writes out the name of the block model?
+        block_fstream << netlist.block_name(block) << " " << netlist.block_model(block)->name << std::endl;
+    }
+}
+
 bool vpr_pack_flow(t_vpr_setup& vpr_setup, const t_arch& arch) {
     auto& packer_opts = vpr_setup.PackerOpts;
 
@@ -594,6 +622,11 @@ bool vpr_pack_flow(t_vpr_setup& vpr_setup, const t_arch& arch) {
         // print the total number of used physical blocks for each
         // physical block type after finishing the packing stage
         print_pb_type_count(g_vpr_ctx.clustering().clb_nlist);
+
+        /* Output files for METIS use */
+        if (packer_opts.dump_metis_file) {
+            dump_metis_file(vpr_setup);
+        }
     }
 
     return status;

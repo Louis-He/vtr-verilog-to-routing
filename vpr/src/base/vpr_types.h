@@ -904,6 +904,7 @@ struct t_packer_opts {
     bool connection_driven;
     int pack_verbosity;
     std::string external_attraction_file;
+    bool dump_metis_file;
     float external_attraction_default_weight;
     float external_attraction_default_value;
     bool enable_pin_feasibility_filter;

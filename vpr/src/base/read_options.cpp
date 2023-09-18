@@ -1812,6 +1812,11 @@ argparse::ArgumentParser create_arg_parser(std::string prog_name, t_options& arg
         .default_value("")
         .show_in(argparse::ShowIn::HELP_ONLY);
 
+    pack_grp.add_argument<bool, ParseOnOff>(args.dump_metis_file, "--dump_metis_file")
+        .help("Whether to dump files to be used by METIS")
+        .default_value("off")
+        .show_in(argparse::ShowIn::HELP_ONLY);
+
     pack_grp.add_argument<bool, ParseOnOff>(args.use_attraction_groups, "--use_attraction_groups")
         .help("Whether attraction groups are used to make it easier to pack primitives in the same floorplan region together.")
         .default_value("on")
