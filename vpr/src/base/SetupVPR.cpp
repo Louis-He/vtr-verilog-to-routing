@@ -568,7 +568,7 @@ void SetupPackerOpts(const t_options& Options,
     PackerOpts->external_attraction_file = Options.external_attraction_file;
     PackerOpts->dump_metis_file = Options.dump_metis_file;
     PackerOpts->external_attraction_default_weight = 0.5; /* DEFAULT: Experiment now */
-    PackerOpts->external_attraction_default_value = -1;
+    PackerOpts->external_attraction_default_value = -2;
     PackerOpts->enable_pin_feasibility_filter = Options.enable_clustering_pin_feasibility_filter;
     PackerOpts->balance_block_type_utilization = Options.balance_block_type_utilization;
     PackerOpts->target_external_pin_util = Options.target_external_pin_util;

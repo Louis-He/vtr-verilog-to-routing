@@ -345,11 +345,13 @@ std::map<t_logical_block_type_ptr, size_t> do_clustering(const t_packer_opts& pa
             }
             int num_repeated_molecules = 0;
 
+            std::set<t_pack_molecule*> checked_failed_molecules;
             while (next_molecule != nullptr && num_repeated_molecules < max_num_repeated_molecules) {
                 prev_molecule = next_molecule;
 
                 try_fill_cluster(packer_opts,
                                  cur_cluster_placement_stats_ptr,
+                                 checked_failed_molecules,
                                  prev_molecule,
                                  next_molecule,
                                  num_repeated_molecules,

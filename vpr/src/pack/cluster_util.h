@@ -221,6 +221,7 @@ enum e_block_pack_status try_pack_molecule(t_cluster_placement_stats* cluster_pl
 
 void try_fill_cluster(const t_packer_opts& packer_opts,
                       t_cluster_placement_stats* cur_cluster_placement_stats_ptr,
+                      std::set<t_pack_molecule*>& checked_failed_molecules,
                       t_pack_molecule*& prev_molecule,
                       t_pack_molecule*& next_molecule,
                       int& num_same_molecules,
@@ -492,5 +493,7 @@ void alloc_and_load_pb_stats(t_pb* pb, const int feasible_block_array_size);
 void init_clb_atoms_lookup(vtr::vector<ClusterBlockId, std::unordered_set<AtomBlockId>>& atoms_lookup);
 
 // Helper functions for load external attraction data
+void load_external_attraction_data_xml(const std::string& attraction_file, const int verbosity);
+
 void load_external_attraction_data(const std::string& attraction_file, const int verbosity);
 #endif

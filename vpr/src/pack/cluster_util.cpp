@@ -1498,6 +1498,7 @@ void update_connection_gain_values(const AtomNetId net_id, const AtomBlockId clu
 
 void try_fill_cluster(const t_packer_opts& packer_opts,
                       t_cluster_placement_stats* cur_cluster_placement_stats_ptr,
+                      std::set<t_pack_molecule*>& checked_failed_molecules,
                       t_pack_molecule*& prev_molecule,
                       t_pack_molecule*& next_molecule,
                       int& num_same_molecules,
@@ -1586,9 +1587,19 @@ void try_fill_cluster(const t_packer_opts& packer_opts,
                                                  unclustered_list_head,
                                                  unclustered_list_head_size,
                                                  primitive_candidate_block_types);
-        if (prev_molecule == next_molecule) {
+        
+        // Change this
+        // This doesn't work if we have a group of atoms that are all infeasible
+        // We need to check if the molecule is in the checked_failed_molecules set
+        // If it is, then we need to increment num_same_molecules
+        // If it isn't, then we need to add it to the set and try again
+
+        if (checked_failed_molecules.find(next_molecule) != checked_failed_molecules.end()) {
             num_same_molecules++;
+        } else {
+            checked_failed_molecules.insert(next_molecule);
         }
+        
         return;
     }
 
@@ -3868,7 +3879,7 @@ void init_clb_atoms_lookup(vtr::vector<ClusterBlockId, std::unordered_set<AtomBl
     }
 }
 
-void load_external_attraction_data(const std::string& attraction_file, const int verbosity) {
+void load_external_attraction_data_xml(const std::string& attraction_file, const int verbosity) {
     if (attraction_file.empty()) {
         return;
     }
@@ -3930,4 +3941,93 @@ void load_external_attraction_data(const std::string& attraction_file, const int
     //     std::string atom_name = atom_ctx.nlist.block_name(block_id);
     //     VTR_LOG("atom id: %d, name: %s\n", block_id, atom_name.c_str());
     // }
+}
+
+void load_external_attraction_data(const std::string& attraction_file, const int verbosity) {
+    if (attraction_file.empty()) {
+        return;
+    }
+
+    const char* attraction_file_char = attraction_file.c_str();
+
+    if (vtr::check_file_name_extension(attraction_file_char, ".txt") == false) {
+        VPR_FATAL_ERROR(VPR_ERROR_OTHER, "Attraction file '%s' has an unknown extension. Expecting .txt for attraction data files.", attraction_file.c_str());
+    }
+
+    auto& atom_ctx = g_vpr_ctx.atom();
+    // initialize external attraction data in clustering helper context
+    auto& attraction_data = g_vpr_ctx.mutable_cl_helper().external_atom_attraction_data;
+
+    VTR_LOGV(verbosity > 1, "\nLoading external attracion data\n");
+
+    using ATTRACTION_GROUP_ID = unsigned int;
+    std::unordered_map<ATTRACTION_GROUP_ID, std::unordered_map<ATTRACTION_GROUP_ID, double>> scores_btw_attraction_groups;
+    std::unordered_map<ATTRACTION_GROUP_ID, std::vector<AtomBlockId>> attraction_group_to_blkid;
+
+    // go through the file
+    std::ifstream file(attraction_file_char);
+    std::string line;
+    bool is_blkname_line = false;
+    while (std::getline(file, line)) {
+        std::istringstream iss(line);
+        std::string first_arg;
+
+        if (!(iss >> first_arg)) {
+            VTR_LOG("Error reading line: %s\n", line.c_str());
+            break;
+        }
+
+        // We hit our spliter between group attraction data and blkname->group mapping
+        if (first_arg == "=") {
+            is_blkname_line = true;
+            continue;
+        }
+
+        if (!is_blkname_line) {
+            ATTRACTION_GROUP_ID src_group_id;
+            src_group_id = std::stoi(first_arg);
+
+            while (true)
+            {
+                ATTRACTION_GROUP_ID dst_group_id;
+                double attraction_score;
+                if (!(iss >> dst_group_id >> attraction_score)) {
+                    break;
+                }
+
+                scores_btw_attraction_groups[src_group_id][dst_group_id] = attraction_score;
+            }
+        } else {
+            std::string blkname = first_arg;
+            ATTRACTION_GROUP_ID group_id;
+
+            if (!(iss >> group_id)) {
+                VTR_LOG("Error reading line: %s\n", line.c_str());
+                break;
+            }
+
+            AtomBlockId blk_id = atom_ctx.nlist.find_block(blkname);
+            VTR_ASSERT(blk_id != AtomBlockId::INVALID());
+
+            auto it = attraction_group_to_blkid.find(group_id);
+            if (it == attraction_group_to_blkid.end()) {
+                attraction_group_to_blkid[group_id] = {blk_id};
+            } else {
+                it->second.push_back(blk_id);
+            }
+        }
+    }
+
+    // Now we have all the data, we need to convert it to the format we need
+    for (auto& src_group : scores_btw_attraction_groups) {
+        for (auto& dst_group : src_group.second) {
+            for (auto& src_blk_id : attraction_group_to_blkid[src_group.first]) {
+                for (auto& dst_blk_id : attraction_group_to_blkid[dst_group.first]) {
+                    attraction_data[src_blk_id][dst_blk_id] = dst_group.second;
+                }
+            }
+        }
+    }
+
+    VTR_LOGV(verbosity > 1, "\nDone creating external attracion data\n");
 }
