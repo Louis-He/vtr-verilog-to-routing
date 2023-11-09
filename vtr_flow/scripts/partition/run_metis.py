@@ -14,7 +14,7 @@ class METIS_Recursive_Runner:
         self.block_infos = {}
         self.block_paritioned_result = {} # blkname -> partition_id
         
-        self.intermediate_txt = "metis_default_in_*.txt"
+        # self.intermediate_txt = "metis_default_in_*.txt"
         self.output_graph = "metis_default_in.txt"
         
         self.construct_from_block_file()
@@ -184,8 +184,6 @@ class METIS_Recursive_Runner:
                     src_new_group_id = unique_group[src_group_id]
                     f.write("%s " % str(src_new_group_id))
                     for dst_group_id in unique_group:
-                        if dst_group_id == src_group_id:
-                            continue
                         dst_new_group_id = unique_group[dst_group_id]
                         attraction_score = self.calculate_attraction_score_only_partition(src_group_id, dst_group_id)
                         attraction_score = math.floor(attraction_score * 100) / 100
@@ -212,6 +210,12 @@ class METIS_Recursive_Runner:
                 # otherwise, append the partition id to reflect the recursive partitioning
                 self.block_paritioned_result[blkname] += str(partition_id)
 
+    def clean_up(self):
+        os.system("rm -f *.block_file.metis.txt.*")
+        os.system("rm -f *.logical_hypergraph.metis.txt.*")
+        os.system("rm -f metis_default_in.txt*")
+
+    # Run this API in the same directory as the input files
     def run_metis_recursive(self, blocks_file, input_hypergraph, output_graph, graph_model, partition_count, run_count):
         assert(run_count >= 0)
         if (run_count == 0):
@@ -219,10 +223,13 @@ class METIS_Recursive_Runner:
         runner = METIS_Runner()
         
         if not os.path.exists(blocks_file):
-            print("blocks file %s does not exist" % blocks_file)
+            # print("blocks file %s does not exist" % blocks_file)
             return
 
-        runner.dump_metis_input(blocks_file, input_hypergraph, output_graph, graph_model)
+        is_exist_edge = runner.dump_metis_input(blocks_file, input_hypergraph, output_graph, graph_model)
+        if not is_exist_edge:
+            return
+        
         runner.run_metis(output_graph, partition_count)
         runner.read_metis_output(partition_count, "%s.part.%d" % (output_graph, partition_count))
         self.update_partitioned_result(runner.partioned_blk_name_to_result_map)
@@ -234,21 +241,23 @@ class METIS_Recursive_Runner:
                                      "%s.%d" % (output_graph, partition_idx),
                                      graph_model, partition_count, run_count-1)
     
-    def run_metis(self, partition_count, graph_model, run_count=None):
+    def run_metis(self, partition_count, graph_model, run_count=None, cleanup=True):
         if run_count is None:
-            run_count = int(math.log2(len(self.block_infos)) / 1.5)
-        print("run metis %d times" % run_count)
+            run_count = int(math.log2(len(self.block_infos)) / 2)
+        print("Start run metis %d times" % run_count)
         self.run_metis_recursive(self.blocks_file, self.input_hypergraph, self.output_graph, graph_model, partition_count, run_count)
         # self.write_external_attraction_data_file_xml('json', 'test_attraction_data2.json')
-        self.write_external_attraction_data_file_xml('custom_group', 'test_attraction_data7.txt')
-
+        self.write_external_attraction_data_file_xml('custom_group', 'test_attraction_data.txt')
+        print("Successfully run metis %d times" % run_count)
+        if cleanup:
+            self.clean_up()
 
 def main():
     blocks_file = sys.argv[1]
     input_hypergraph = sys.argv[2]
 
     runner = METIS_Recursive_Runner(blocks_file, input_hypergraph)
-    runner.run_metis(2, "star")
+    runner.run_metis(2, "star", cleanup=True)
     
 
 if __name__=="__main__":

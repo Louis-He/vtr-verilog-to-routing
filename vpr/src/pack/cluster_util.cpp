@@ -1571,6 +1571,8 @@ void try_fill_cluster(const t_packer_opts& packer_opts,
             }
         }
 
+        checked_failed_molecules.insert(next_molecule);
+
         next_molecule = get_molecule_for_cluster(cluster_ctx.clb_nlist.block_pb(clb_index),
                                                  attraction_groups,
                                                  external_atom_attraction_data,
@@ -1596,8 +1598,6 @@ void try_fill_cluster(const t_packer_opts& packer_opts,
 
         if (checked_failed_molecules.find(next_molecule) != checked_failed_molecules.end()) {
             num_same_molecules++;
-        } else {
-            checked_failed_molecules.insert(next_molecule);
         }
         
         return;
@@ -2330,11 +2330,11 @@ t_pack_molecule* get_highest_gain_molecule(t_pb* cur_pb,
 
     // 5. Find unpacked molecules based on external attraction data
     //    No condition here since we may always want to check this. External data is used to overwrite internal clustering intention
-    if (!external_atom_attraction_data.empty()) {
-        add_cluster_molecule_candidates_by_external_attraction_data(cur_pb, cluster_index, cluster_placement_stats_ptr, feasible_block_array_size,
-                                                                    attraction_groups, external_atom_attraction_data,
-                                                                    external_attraction_default_weight, external_attraction_default_value);
-    }
+    // if (!external_atom_attraction_data.empty()) {
+    //     add_cluster_molecule_candidates_by_external_attraction_data(cur_pb, cluster_index, cluster_placement_stats_ptr, feasible_block_array_size,
+    //                                                                 attraction_groups, external_atom_attraction_data,
+    //                                                                 external_attraction_default_weight, external_attraction_default_value);
+    // }
 
     /* Grab highest gain molecule */
     t_pack_molecule* molecule = nullptr;

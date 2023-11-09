@@ -30,7 +30,7 @@ class METIS_Runner:
         return 1.0/len(vertices)
     
     def populate_block_info_from_block_file(self, block_file_path):
-        print("Reading block file %s" % block_file_path)
+        # print("Reading block file %s" % block_file_path)
         assert(self.btypes is None and self.block_to_type is None and self.block_names is None)
         self.btypes = []
         self.block_to_type = []
@@ -74,7 +74,7 @@ class METIS_Runner:
                     weights[edge] = weight
 
     def populate_edge_info_from_hypergraph(self, hypergraph_file_path, graph_model):
-        print("Reading hypergraph file %s" % hypergraph_file_path)
+        # print("Reading hypergraph file %s" % hypergraph_file_path)
         assert(self.edges is None and self.edge_weight is None and self.edges_conn is None)
         self.edges = []
         self.edge_weight = {}
@@ -113,11 +113,10 @@ class METIS_Runner:
                 num_hedges_read += 1
                 graph_model_fn(hedge_parts=parts, edges=self.edges, weights=self.edge_weight)
 
-            print (num_hedges)
-            print (num_hedges_read)
-            # assert(num_hedges == num_hedges_read)
+            # print (num_hedges)
+            # print (num_hedges_read)
+            assert(num_hedges == num_hedges_read)
             
-        # TODO: Continue here
         # edges map is done. now dump it!
         smallest_edge_weight = None
         # make edge weights integer
@@ -147,6 +146,7 @@ class METIS_Runner:
                 self.vertex_data[vertex_b] = [(vertex_a, weight)]
 
     def dump_to_metis_input(self, output_graph="metis_default_in.txt"):
+        edge_count = 0
         with open(output_graph,"w") as f:
             f.write("%d %d 011 %d\n" % (self.num_vertices, len(self.edge_weight), len(self.btypes)))
             for vertex_index in range(self.num_vertices):
@@ -161,19 +161,24 @@ class METIS_Runner:
                     for edge in self.vertex_data[vertex_index]:
                         # need the +1 to go back to 1-indexed
                         f.write("%d %d " % (edge[0]+1, edge[1]+1))
+                        edge_count += 1
                 f.write("\n")
+                
+        return edge_count != 0
 
     def dump_metis_input(self, blocks_file, input_hypergraph, output_graph, graph_model):
         self.populate_block_info_from_block_file(blocks_file)
         self.populate_edge_info_from_hypergraph(input_hypergraph, graph_model)
-        self.dump_to_metis_input(output_graph)
+        is_exist_edge = self.dump_to_metis_input(output_graph)
+        
+        return is_exist_edge
         
     @classmethod
     def run_metis(cls, metis_input_file, partition_count):
         stream = os.popen('gpmetis %s %d' % (metis_input_file, partition_count))
         output = stream.read()
         
-        print('metis output: ', output)
+        # print('metis output: ', output)
         
     # read the metis output file, each line represents the partition of a vertex
     def read_metis_output(self, _partition_num, metis_output_file):
