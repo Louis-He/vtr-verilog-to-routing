@@ -5,7 +5,7 @@ import math
 import xml.etree.ElementTree as ET
 import json
 
-SCORE_MIN_THRESHOLD = -2
+SCORE_MIN_THRESHOLD = -1
 class METIS_Recursive_Runner:
     def __init__(self, blocks_file, input_hypergraph) -> None:
         self.blocks_file = blocks_file
@@ -46,7 +46,7 @@ class METIS_Recursive_Runner:
         if uncommon_surffix_len > 3:
             return SCORE_MIN_THRESHOLD
             
-        score = 4 * math.exp(-1/3*uncommon_surffix_len) + SCORE_MIN_THRESHOLD
+        score = 2 * math.exp(-1/3*uncommon_surffix_len) + SCORE_MIN_THRESHOLD
         return score
     
     def calculate_attraction_score(self, src_name, dst_name, src_partition, dst_partition):

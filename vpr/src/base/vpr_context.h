@@ -351,7 +351,15 @@ struct ClusteringHelperContext : public Context {
     // 2D vector to store the external attraction data from one atom to another, default set to slight repulsion in SetupPackerOpts()
     // external_atom_attraction_data[src][dst]:
     //     The attraction of putting dst atom to src atom
-    std::unordered_map<AtomBlockId, std::map<AtomBlockId, double>> external_atom_attraction_data;
+    std::unordered_map<AtomBlockId, std::unordered_map<AtomBlockId, double>> external_atom_attraction_data;
+
+    // Attraction Scores between each external attraction group
+    using EXTERNAL_ATTRACTION_GROUP_ID = unsigned int;
+    std::unordered_map<EXTERNAL_ATTRACTION_GROUP_ID, std::unordered_map<EXTERNAL_ATTRACTION_GROUP_ID, double>> scores_btw_attraction_groups;
+    // A map from each external attraction group to the list of AtomBlockIds that are inside the group
+    std::unordered_map<EXTERNAL_ATTRACTION_GROUP_ID, std::vector<AtomBlockId>> attraction_group_to_blkid;
+    // A map from each AtomBlockId to the external attraction group it belongs to
+    std::unordered_map<AtomBlockId, EXTERNAL_ATTRACTION_GROUP_ID> atom_to_attraction_group_map;
 
     // A vector of ordered_sets of AtomBlockIds that are inside each clustered block during the time of clustering
     // This is used when we are clustering, hence the lookup map is not complete during the clustering algorithm.
