@@ -351,7 +351,7 @@ struct ClusteringHelperContext : public Context {
     // 2D vector to store the external attraction data from one atom to another, default set to slight repulsion in SetupPackerOpts()
     // external_atom_attraction_data[src][dst]:
     //     The attraction of putting dst atom to src atom
-    std::unordered_map<AtomBlockId, std::unordered_map<AtomBlockId, double>> external_atom_attraction_data;
+    // std::unordered_map<AtomBlockId, std::unordered_map<AtomBlockId, double>> external_atom_attraction_data;
 
     // Attraction Scores between each external attraction group
     using EXTERNAL_ATTRACTION_GROUP_ID = unsigned int;

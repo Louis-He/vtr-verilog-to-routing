@@ -5,7 +5,8 @@ import math
 import xml.etree.ElementTree as ET
 import json
 
-SCORE_MIN_THRESHOLD = -1
+SCORE_MIN_THRESHOLD = -0.32
+LEAST_NUM_NODES_FOR_PARTITION = 20
 class METIS_Recursive_Runner:
     def __init__(self, blocks_file, input_hypergraph) -> None:
         self.blocks_file = blocks_file
@@ -46,7 +47,7 @@ class METIS_Recursive_Runner:
         if uncommon_surffix_len > 3:
             return SCORE_MIN_THRESHOLD
             
-        score = 2 * math.exp(-1/3*uncommon_surffix_len) + SCORE_MIN_THRESHOLD
+        score = (-2 * SCORE_MIN_THRESHOLD) * math.exp(-1/2*uncommon_surffix_len) + SCORE_MIN_THRESHOLD
         return score
     
     def calculate_attraction_score(self, src_name, dst_name, src_partition, dst_partition):
@@ -228,6 +229,10 @@ class METIS_Recursive_Runner:
 
         is_exist_edge = runner.dump_metis_input(blocks_file, input_hypergraph, output_graph, graph_model)
         if not is_exist_edge:
+            return
+        
+        # We already gathers all the blocks, we don't run partitioning again if the number of blocks is less than 20
+        if len(runner.block_names) < LEAST_NUM_NODES_FOR_PARTITION:
             return
         
         runner.run_metis(output_graph, partition_count)

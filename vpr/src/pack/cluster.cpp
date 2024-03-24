@@ -312,7 +312,6 @@ std::map<t_logical_block_type_ptr, size_t> do_clustering(const t_packer_opts& pa
             cluster_stats.num_unrelated_clustering_attempts = 0;
             next_molecule = get_molecule_for_cluster(cluster_ctx.clb_nlist.block_pb(clb_index),
                                                      attraction_groups,
-                                                     cl_helper_ctx.external_atom_attraction_data,
                                                      packer_opts.external_attraction_default_weight,
                                                      packer_opts.external_attraction_default_value,
                                                      allow_unrelated_clustering,
@@ -363,7 +362,6 @@ std::map<t_logical_block_type_ptr, size_t> do_clustering(const t_packer_opts& pa
                                  clb_index,
                                  detailed_routing_stage,
                                  attraction_groups,
-                                 cl_helper_ctx.external_atom_attraction_data,
                                  packer_opts.external_attraction_default_weight,
                                  packer_opts.external_attraction_default_value,
                                  clb_inter_blk_nets,

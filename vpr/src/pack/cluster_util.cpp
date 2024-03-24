@@ -429,6 +429,15 @@ void remove_molecule_from_pb_stats_candidates(t_pack_molecule* molecule,
     pb->pb_stats->num_feasible_blocks--;
 }
 
+bool check_if_molecule_in_pb_stats_candidates(t_pack_molecule* molecule, t_pb* pb) {
+    for (int i = 0; i < pb->pb_stats->num_feasible_blocks; i++) {
+        if (pb->pb_stats->feasible_blocks[i] == molecule) {
+            return true; // already in queue
+        }
+    }
+    return false;
+}
+
 /* Add blk to list of feasible blocks sorted according to gain */
 void add_molecule_to_pb_stats_candidates(t_pack_molecule* molecule,
                                          const std::map<AtomBlockId, float>& gain,
@@ -436,10 +445,8 @@ void add_molecule_to_pb_stats_candidates(t_pack_molecule* molecule,
                                          const ClusterBlockId cluster_index,
                                          int max_queue_size,
                                          AttractionInfo& attraction_groups,
-                                         const std::unordered_map<AtomBlockId, std::unordered_map<AtomBlockId, double>>& external_atom_attraction_data,
                                          float external_attraction_default_weight,
                                          float external_attraction_default_value) {
-    int i, j;
     int num_molecule_failures = 0;
 
     AttractGroupId cluster_att_grp = pb->pb_stats->attraction_grp_id;
@@ -462,23 +469,24 @@ void add_molecule_to_pb_stats_candidates(t_pack_molecule* molecule,
         }
     }
 
-    for (i = 0; i < pb->pb_stats->num_feasible_blocks; i++) {
+    for (int i = 0; i < pb->pb_stats->num_feasible_blocks; i++) {
         if (pb->pb_stats->feasible_blocks[i] == molecule) {
             return; // already in queue, do nothing
         }
     }
 
-    float new_molecule_gain = get_molecule_gain(molecule, cluster_index, gain, cluster_att_grp, attraction_groups, external_atom_attraction_data,
+    float new_molecule_gain = get_molecule_gain(molecule, cluster_index, gain, cluster_att_grp, attraction_groups,
                                                 external_attraction_default_weight, external_attraction_default_value, num_molecule_failures);
 
+    int j;
     if (pb->pb_stats->num_feasible_blocks >= max_queue_size - 1) {
         /* maximum size for array, remove smallest gain element and sort */
         if (new_molecule_gain > get_molecule_gain(pb->pb_stats->feasible_blocks[0], cluster_index, gain, cluster_att_grp, attraction_groups,
-                                                  external_atom_attraction_data, external_attraction_default_weight, external_attraction_default_value,
+                                                  external_attraction_default_weight, external_attraction_default_value,
                                                   num_molecule_failures)) {
             /* single loop insertion sort */
             for (j = 0; j < pb->pb_stats->num_feasible_blocks - 1; j++) {
-                if (new_molecule_gain <= get_molecule_gain(pb->pb_stats->feasible_blocks[j + 1], cluster_index, gain, cluster_att_grp, attraction_groups, external_atom_attraction_data,
+                if (new_molecule_gain <= get_molecule_gain(pb->pb_stats->feasible_blocks[j + 1], cluster_index, gain, cluster_att_grp, attraction_groups,
                                                            external_attraction_default_weight, external_attraction_default_value, num_molecule_failures)) {
                     pb->pb_stats->feasible_blocks[j] = molecule;
                     break;
@@ -494,7 +502,7 @@ void add_molecule_to_pb_stats_candidates(t_pack_molecule* molecule,
         /* Expand array and single loop insertion sort */
         for (j = pb->pb_stats->num_feasible_blocks - 1; j >= 0; j--) {
             if (get_molecule_gain(pb->pb_stats->feasible_blocks[j], cluster_index, gain, cluster_att_grp, attraction_groups,
-                                  external_atom_attraction_data, external_attraction_default_weight, external_attraction_default_value, num_molecule_failures)
+                                  external_attraction_default_weight, external_attraction_default_value, num_molecule_failures)
                 > new_molecule_gain) {
                 pb->pb_stats->feasible_blocks[j + 1] = pb->pb_stats->feasible_blocks[j];
             } else {
@@ -1510,7 +1518,6 @@ void try_fill_cluster(const t_packer_opts& packer_opts,
                       const ClusterBlockId clb_index,
                       const int detailed_routing_stage,
                       AttractionInfo& attraction_groups,
-                      const std::unordered_map<AtomBlockId, std::unordered_map<AtomBlockId, double>>& external_atom_attraction_data,
                       float external_attraction_default_weight,
                       float external_attraction_default_value,
                       vtr::vector<ClusterBlockId, std::vector<AtomNetId>>& clb_inter_blk_nets,
@@ -1575,7 +1582,6 @@ void try_fill_cluster(const t_packer_opts& packer_opts,
 
         next_molecule = get_molecule_for_cluster(cluster_ctx.clb_nlist.block_pb(clb_index),
                                                  attraction_groups,
-                                                 external_atom_attraction_data,
                                                  external_attraction_default_weight,
                                                  external_attraction_default_value,
                                                  allow_unrelated_clustering,
@@ -1640,7 +1646,6 @@ void try_fill_cluster(const t_packer_opts& packer_opts,
     }
     next_molecule = get_molecule_for_cluster(cluster_ctx.clb_nlist.block_pb(clb_index),
                                              attraction_groups,
-                                             external_atom_attraction_data,
                                              external_attraction_default_weight,
                                              external_attraction_default_value,
                                              allow_unrelated_clustering,
@@ -2261,7 +2266,6 @@ void start_new_cluster(t_cluster_placement_stats* cluster_placement_stats,
  */
 t_pack_molecule* get_highest_gain_molecule(t_pb* cur_pb,
                                            AttractionInfo& attraction_groups,
-                                           const std::unordered_map<AtomBlockId, std::unordered_map<AtomBlockId, double>>& external_atom_attraction_data,
                                            float external_attraction_default_weight,
                                            float external_attraction_default_value,
                                            const enum e_gain_type gain_mode,
@@ -2285,7 +2289,7 @@ t_pack_molecule* get_highest_gain_molecule(t_pb* cur_pb,
     // 1. Find unpacked molecules based on criticality and strong connectedness (connected by low fanout nets) with current cluster
     if (cur_pb->pb_stats->num_feasible_blocks == NOT_VALID) {
         add_cluster_molecule_candidates_by_connectivity_and_timing(cur_pb, cluster_index, cluster_placement_stats_ptr, feasible_block_array_size,
-                                                                   attraction_groups, external_atom_attraction_data, external_attraction_default_weight,
+                                                                   attraction_groups, external_attraction_default_weight,
                                                                    external_attraction_default_value);
     }
 
@@ -2294,21 +2298,21 @@ t_pack_molecule* get_highest_gain_molecule(t_pb* cur_pb,
         if (cur_pb->pb_stats->num_feasible_blocks == 0 && cur_pb->pb_stats->explore_transitive_fanout) {
             add_cluster_molecule_candidates_by_transitive_connectivity(cur_pb, cluster_placement_stats_ptr, clb_inter_blk_nets,
                                                                        cluster_index, transitive_fanout_threshold, feasible_block_array_size,
-                                                                       attraction_groups, external_atom_attraction_data, external_attraction_default_weight,
+                                                                       attraction_groups, external_attraction_default_weight,
                                                                        external_attraction_default_value);
         }
 
         // 3. Find unpacked molecules based on weak connectedness (connected by high fanout nets) with current cluster
         if (cur_pb->pb_stats->num_feasible_blocks == 0 && cur_pb->pb_stats->tie_break_high_fanout_net) {
             add_cluster_molecule_candidates_by_highfanout_connectivity(cur_pb, cluster_index, cluster_placement_stats_ptr, feasible_block_array_size,
-                                                                       attraction_groups, external_atom_attraction_data, external_attraction_default_weight,
+                                                                       attraction_groups, external_attraction_default_weight,
                                                                        external_attraction_default_value);
         }
     } else { //Reverse order
         // 3. Find unpacked molecules based on weak connectedness (connected by high fanout nets) with current cluster
         if (cur_pb->pb_stats->num_feasible_blocks == 0 && cur_pb->pb_stats->tie_break_high_fanout_net) {
             add_cluster_molecule_candidates_by_highfanout_connectivity(cur_pb, cluster_index, cluster_placement_stats_ptr, feasible_block_array_size,
-                                                                       attraction_groups, external_atom_attraction_data, external_attraction_default_weight,
+                                                                       attraction_groups, external_attraction_default_weight,
                                                                        external_attraction_default_value);
         }
 
@@ -2316,23 +2320,23 @@ t_pack_molecule* get_highest_gain_molecule(t_pb* cur_pb,
         if (cur_pb->pb_stats->num_feasible_blocks == 0 && cur_pb->pb_stats->explore_transitive_fanout) {
             add_cluster_molecule_candidates_by_transitive_connectivity(cur_pb, cluster_placement_stats_ptr, clb_inter_blk_nets,
                                                                        cluster_index, transitive_fanout_threshold, feasible_block_array_size,
-                                                                       attraction_groups, external_atom_attraction_data, external_attraction_default_weight,
+                                                                       attraction_groups, external_attraction_default_weight,
                                                                        external_attraction_default_value);
         }
     }
 
     // 4. Find unpacked molecules based on attraction group of the current cluster (if the cluster has an attraction group)
     if (cur_pb->pb_stats->num_feasible_blocks == 0) {
-        add_cluster_molecule_candidates_by_attraction_group(cur_pb, cluster_placement_stats_ptr, attraction_groups, external_atom_attraction_data,
+        add_cluster_molecule_candidates_by_attraction_group(cur_pb, cluster_placement_stats_ptr, attraction_groups,
                                                             external_attraction_default_weight, external_attraction_default_value,
                                                             feasible_block_array_size, cluster_index, primitive_candidate_block_types);
     }
 
     // 5. Find unpacked molecules based on external attraction data
     //    No condition here since we may always want to check this. External data is used to overwrite internal clustering intention
-    if (!external_atom_attraction_data.empty()) {
+    if (!g_vpr_ctx.cl_helper().scores_btw_attraction_groups.empty()) {
         add_cluster_molecule_candidates_by_external_attraction_data(cur_pb, cluster_index, cluster_placement_stats_ptr, feasible_block_array_size,
-                                                                    attraction_groups, external_atom_attraction_data,
+                                                                    attraction_groups,
                                                                     external_attraction_default_weight, external_attraction_default_value);
     }
 
@@ -2343,8 +2347,30 @@ t_pack_molecule* get_highest_gain_molecule(t_pb* cur_pb,
         int index = cur_pb->pb_stats->num_feasible_blocks;
         molecule = cur_pb->pb_stats->feasible_blocks[index];
         VTR_ASSERT(molecule->valid == true);
+
+        // int num_molecule_failures = 0;
+        // if (attraction_groups.num_attraction_groups() > 0) {
+        //     auto got = cur_pb->pb_stats->atom_failures.find(molecule->atom_block_ids[0]);
+        //     if (got == cur_pb->pb_stats->atom_failures.end()) {
+        //         num_molecule_failures = 0;
+        //     } else {
+        //         num_molecule_failures = got->second;
+        //     }
+        // }
+
+        // float gain = get_molecule_gain(molecule, cluster_index, cur_pb->pb_stats->gain, cur_pb->pb_stats->attraction_grp_id, attraction_groups,
+        //                             external_attraction_default_weight, external_attraction_default_value, num_molecule_failures);
+        // // write gain to a file called "gain.txt"
+        // std::ofstream gain_file;
+        // gain_file.open("gain.txt", std::ios_base::app);
+        // gain_file << gain << std::endl;
+        // gain_file.close();
+
+
         return molecule;
     }
+
+    VTR_LOG("null\n");
 
     return molecule;
 }
@@ -2355,7 +2381,6 @@ void add_cluster_molecule_candidates_by_connectivity_and_timing(t_pb* cur_pb,
                                                                 t_cluster_placement_stats* cluster_placement_stats_ptr,
                                                                 const int feasible_block_array_size,
                                                                 AttractionInfo& attraction_groups,
-                                                                const std::unordered_map<AtomBlockId, std::unordered_map<AtomBlockId, double>>& external_atom_attraction_data,
                                                                 float external_attraction_default_weight,
                                                                 float external_attraction_default_value) {
     VTR_ASSERT(cur_pb->pb_stats->num_feasible_blocks == NOT_VALID);
@@ -2375,7 +2400,7 @@ void add_cluster_molecule_candidates_by_connectivity_and_timing(t_pb* cur_pb,
                     if (success) {
                         add_molecule_to_pb_stats_candidates(molecule,
                                                             cur_pb->pb_stats->gain, cur_pb, cluster_index, feasible_block_array_size,
-                                                            attraction_groups, external_atom_attraction_data,
+                                                            attraction_groups,
                                                             external_attraction_default_weight, external_attraction_default_value);
                     }
                 }
@@ -2390,7 +2415,6 @@ void add_cluster_molecule_candidates_by_highfanout_connectivity(t_pb* cur_pb,
                                                                 t_cluster_placement_stats* cluster_placement_stats_ptr,
                                                                 const int feasible_block_array_size,
                                                                 AttractionInfo& attraction_groups,
-                                                                const std::unordered_map<AtomBlockId, std::unordered_map<AtomBlockId, double>>& external_atom_attraction_data,
                                                                 float external_attraction_default_weight,
                                                                 float external_attraction_default_value) {
     /* Because the packer ignores high fanout nets when marking what blocks
@@ -2420,7 +2444,7 @@ void add_cluster_molecule_candidates_by_highfanout_connectivity(t_pb* cur_pb,
                         add_molecule_to_pb_stats_candidates(molecule,
                                                             cur_pb->pb_stats->gain, cur_pb, cluster_index,
                                                             std::min(feasible_block_array_size, AAPACK_MAX_HIGH_FANOUT_EXPLORE),
-                                                            attraction_groups, external_atom_attraction_data,
+                                                            attraction_groups,
                                                             external_attraction_default_weight, external_attraction_default_value);
                         count++;
                     }
@@ -2442,7 +2466,6 @@ void add_cluster_molecule_candidates_by_highfanout_connectivity(t_pb* cur_pb,
 void add_cluster_molecule_candidates_by_attraction_group(t_pb* cur_pb,
                                                          t_cluster_placement_stats* cluster_placement_stats_ptr,
                                                          AttractionInfo& attraction_groups,
-                                                         const std::unordered_map<AtomBlockId, std::unordered_map<AtomBlockId, double>>& external_atom_attraction_data,
                                                          float external_attraction_default_weight,
                                                          float external_attraction_default_value,
                                                          const int feasible_block_array_size,
@@ -2514,7 +2537,7 @@ void add_cluster_molecule_candidates_by_attraction_group(t_pb* cur_pb,
                         if (success) {
                             add_molecule_to_pb_stats_candidates(molecule,
                                                                 cur_pb->pb_stats->gain, cur_pb, clb_index, feasible_block_array_size,
-                                                                attraction_groups, external_atom_attraction_data,
+                                                                attraction_groups,
                                                                 external_attraction_default_weight, external_attraction_default_value);
                         }
                     }
@@ -2551,7 +2574,7 @@ void add_cluster_molecule_candidates_by_attraction_group(t_pb* cur_pb,
                     if (success) {
                         add_molecule_to_pb_stats_candidates(molecule,
                                                             cur_pb->pb_stats->gain, cur_pb, clb_index, feasible_block_array_size,
-                                                            attraction_groups, external_atom_attraction_data,
+                                                            attraction_groups,
                                                             external_attraction_default_weight, external_attraction_default_value);
                     }
                 }
@@ -2568,7 +2591,6 @@ void add_cluster_molecule_candidates_by_transitive_connectivity(t_pb* cur_pb,
                                                                 int transitive_fanout_threshold,
                                                                 const int feasible_block_array_size,
                                                                 AttractionInfo& attraction_groups,
-                                                                const std::unordered_map<AtomBlockId, std::unordered_map<AtomBlockId, double>>& external_atom_attraction_data,
                                                                 float external_attraction_default_weight,
                                                                 float external_attraction_default_value) {
     //TODO: For now, only done by fan-out; should also consider fan-in
@@ -2587,7 +2609,7 @@ void add_cluster_molecule_candidates_by_transitive_connectivity(t_pb* cur_pb,
             if (success) {
                 add_molecule_to_pb_stats_candidates(molecule, cur_pb->pb_stats->gain, cur_pb, cluster_index,
                                                     std::min(feasible_block_array_size, AAPACK_MAX_TRANSITIVE_EXPLORE),
-                                                    attraction_groups, external_atom_attraction_data,
+                                                    attraction_groups,
                                                     external_attraction_default_weight, external_attraction_default_value);
             }
         }
@@ -2599,10 +2621,9 @@ void add_cluster_molecule_candidates_by_external_attraction_data(t_pb* cur_pb,
                                                                  t_cluster_placement_stats* cluster_placement_stats_ptr,
                                                                  const int feasible_block_array_size,
                                                                  AttractionInfo& attraction_groups,
-                                                                 const std::unordered_map<AtomBlockId, std::unordered_map<AtomBlockId, double>>& external_atom_attraction_data,
                                                                  float external_attraction_default_weight,
                                                                  float external_attraction_default_value) {
-    if (external_atom_attraction_data.empty()) return;
+    if (g_vpr_ctx.cl_helper().scores_btw_attraction_groups.empty()) return;
 
     auto& atom_ctx = g_vpr_ctx.atom();
     const auto& cl_helper_ctx = g_vpr_ctx.cl_helper();
@@ -2612,8 +2633,8 @@ void add_cluster_molecule_candidates_by_external_attraction_data(t_pb* cur_pb,
     // Given all the blocks already in the cluster, explore all the other atom blocks that can be cluster into this cluster
     // We first find all the attraction groups that the blocks in the cluster belong to
     // Then we find all the other candidate groups that are relared to the attraction groups of the blocks in the cluster
-    std::set<ClusteringHelperContext::EXTERNAL_ATTRACTION_GROUP_ID> attraction_groups_in_cluster;
-    std::unordered_map<ClusteringHelperContext::EXTERNAL_ATTRACTION_GROUP_ID, double> candidate_attraction_groups;
+    // std::set<ClusteringHelperContext::EXTERNAL_ATTRACTION_GROUP_ID> attraction_groups_in_cluster;
+    std::unordered_map<ClusteringHelperContext::EXTERNAL_ATTRACTION_GROUP_ID, std::pair<unsigned, double>> candidate_attraction_groups;
     for (const auto& blk_id : atom_blocks_in_cluster) {
         const auto src_blk_attraction_group_itr = cl_helper_ctx.atom_to_attraction_group_map.find(blk_id);
         if (src_blk_attraction_group_itr == cl_helper_ctx.atom_to_attraction_group_map.end()) {
@@ -2626,27 +2647,38 @@ void add_cluster_molecule_candidates_by_external_attraction_data(t_pb* cur_pb,
             continue;
         }
 
-        auto result = attraction_groups_in_cluster.insert(src_attraction_group_id);
-        if (result.second) {
-            for (const auto& itr : candidate_groups_itr->second) {
-                // insert the candidate group into the candidate_attraction_groups map
-                // if the candidate group already exists, add the score to the existing score
-                auto result = candidate_attraction_groups.emplace(itr.first, itr.second);
-                if (!result.second) {
-                    result.first->second += itr.second;
-                }
+        // attraction_groups_in_cluster.insert(src_attraction_group_id);
+        // We should double count the score if the source attraction group is in the cluster more than once
+        for (const auto& itr : candidate_groups_itr->second) {
+            // insert the candidate group into the candidate_attraction_groups map
+            // if the candidate group already exists, add the score to the existing score
+            auto result = candidate_attraction_groups.emplace(itr.first, std::make_pair(1, itr.second));
+            if (!result.second) {
+                // if not inserted, add the score to the existing score
+                auto& attraction_group_info = result.first->second;
+                attraction_group_info.first++;
+                attraction_group_info.second += itr.second;
             }
         }
     }
 
     // Find the candidate group with the highest score
     ClusteringHelperContext::EXTERNAL_ATTRACTION_GROUP_ID final_candidate_group;
-    double max_score = 0;
+    double max_score = -9999;
     for (const auto& itr : candidate_attraction_groups) {
-        if (itr.second > max_score) {
-            max_score = itr.second;
+        const auto& attraction_group_info = itr.second;
+        double attraction_score = attraction_group_info.second / attraction_group_info.first;
+        if (attraction_score > max_score) {
+            max_score = attraction_score;
             final_candidate_group = itr.first;
         }
+    }
+
+    // VTR_LOG("add_cluster_molecule_candidates_by_external_attraction_data Best score is %lf\n", max_score);
+
+    if (max_score < 0) {
+        // If the best group indicates repulsion, we don't want to continue. Let's better not to add anything.
+        return;
     }
 
     // Iterate through all the blocks in the candidate group and add them to the feasible blocks
@@ -2656,11 +2688,17 @@ void add_cluster_molecule_candidates_by_external_attraction_data(t_pb* cur_pb,
             for (const auto& kv : vtr::make_range(rng.first, rng.second)) {
                 t_pack_molecule* molecule = kv.second;
                 if (molecule->valid) {
-                    bool success = check_free_primitives_for_molecule_atoms(molecule, cluster_placement_stats_ptr);
+                    // check if the molecule is already in the candidate list,
+                    // if already in the list, we don't need to update it anymore
+                    if (!check_if_molecule_in_pb_stats_candidates(molecule, cur_pb)) {
+                        continue;
+                    }
+
+                    bool  success = check_free_primitives_for_molecule_atoms(molecule, cluster_placement_stats_ptr);
                     if (success) {
                         add_molecule_to_pb_stats_candidates(molecule,
                                                             cur_pb->pb_stats->gain, cur_pb, cluster_index, feasible_block_array_size,
-                                                            attraction_groups, external_atom_attraction_data,
+                                                            attraction_groups,
                                                             external_attraction_default_weight, external_attraction_default_value);
                     }
                 }
@@ -2693,7 +2731,6 @@ bool check_free_primitives_for_molecule_atoms(t_pack_molecule* molecule, t_clust
 /*****************************************/
 t_pack_molecule* get_molecule_for_cluster(t_pb* cur_pb,
                                           AttractionInfo& attraction_groups,
-                                          const std::unordered_map<AtomBlockId, std::unordered_map<AtomBlockId, double>>& external_atom_attraction_data,
                                           float external_attraction_default_weight,
                                           float external_attraction_default_value,
                                           const bool allow_unrelated_clustering,
@@ -2717,7 +2754,7 @@ t_pack_molecule* get_molecule_for_cluster(t_pb* cur_pb,
 
     /* If cannot pack into primitive, try packing into cluster */
 
-    auto best_molecule = get_highest_gain_molecule(cur_pb, attraction_groups, external_atom_attraction_data, external_attraction_default_weight,
+    auto best_molecule = get_highest_gain_molecule(cur_pb, attraction_groups, external_attraction_default_weight,
                                                    external_attraction_default_value,
                                                    NOT_HILL_CLIMBING, cluster_placement_stats_ptr, clb_inter_blk_nets,
                                                    cluster_index, prioritize_transitive_connectivity,
@@ -3055,7 +3092,6 @@ float get_molecule_gain(
     const std::map<AtomBlockId, float>& blk_gain,
     AttractGroupId cluster_attraction_group_id,
     AttractionInfo& attraction_groups,
-    const std::unordered_map<AtomBlockId, std::unordered_map<AtomBlockId, double>>& external_atom_attraction_data,
     float external_attraction_default_weight, float external_attraction_default_value, int num_molecule_failures
 ) {
     float gain = 0.0;
@@ -3071,6 +3107,7 @@ float get_molecule_gain(
     const auto& cl_helper_ctx = g_vpr_ctx.cl_helper();
 
     num_introduced_inputs_of_indirectly_related_block = 0;
+    unsigned attraction_block_num = 0;
     for (i = 0; i < get_array_size_of_molecule(molecule); i++) {
         auto blk_id = molecule->atom_block_ids[i];
         if (!blk_id) continue;
@@ -3110,22 +3147,40 @@ float get_molecule_gain(
         }
 
         // Calculate the score affected by external atom attraction data
-        if (!external_atom_attraction_data.empty()) {
+        const auto& atom_to_external_attraction_group_map = cl_helper_ctx.atom_to_attraction_group_map;
+        const auto& external_attraction_score_btw_groups_map = cl_helper_ctx.scores_btw_attraction_groups;
+
+        if (!g_vpr_ctx.cl_helper().scores_btw_attraction_groups.empty()) {
             const auto& atom_blocks_ids = cl_helper_ctx.incomplete_cluster_to_atoms_lookup.at(cluster_index);
+            attraction_block_num += atom_blocks_ids.size();
             for (const auto& blk : atom_blocks_ids) {
-                auto itr = external_atom_attraction_data.find(blk);
-                if (itr == external_atom_attraction_data.end()) {
+                auto source_group_itr = atom_to_external_attraction_group_map.find(blk);
+                if (source_group_itr == atom_to_external_attraction_group_map.end()) {
+                    external_attraction_score += external_attraction_default_value;
+                    continue;
+                }
+                auto dst_group_itr = atom_to_external_attraction_group_map.find(blk_id);
+                if (dst_group_itr == atom_to_external_attraction_group_map.end()) {
+                    external_attraction_score += external_attraction_default_value;
+                    continue;
+                }
+                ClusteringHelperContext::EXTERNAL_ATTRACTION_GROUP_ID src_attraction_group_id = source_group_itr->second;
+                ClusteringHelperContext::EXTERNAL_ATTRACTION_GROUP_ID dst_attraction_group_id = dst_group_itr->second;
+
+                auto itr = external_attraction_score_btw_groups_map.find(src_attraction_group_id);
+                if (itr == external_attraction_score_btw_groups_map.end()) {
                     external_attraction_score += external_attraction_default_value;
                     continue;
                 }
 
-                auto dst_itr = itr->second.find(blk_id);
-                if (dst_itr == itr->second.end()) {
+                const auto& score_map = itr->second;
+                auto score_itr = score_map.find(dst_attraction_group_id);
+                if (score_itr == score_map.end()) {
                     external_attraction_score += external_attraction_default_value;
                     continue;
                 }
 
-                external_attraction_score += external_atom_attraction_data.at(blk).at(blk_id);
+                external_attraction_score += score_itr->second;
             }
         }
     }
@@ -3133,7 +3188,9 @@ float get_molecule_gain(
     gain += att_grp_gain;
     gain += molecule->base_gain * 0.0001; /* Use base gain as tie breaker TODO: need to sweep this value and perhaps normalize */
     gain -= num_introduced_inputs_of_indirectly_related_block * (0.001);
-    gain += external_attraction_default_weight * external_attraction_score;
+    if (attraction_block_num != 0) {
+        gain += external_attraction_default_weight * external_attraction_score / attraction_block_num;
+    }
 
     if (num_molecule_failures > 0 && attraction_groups.num_attraction_groups() > 0) {
         gain -= 0.1 * num_molecule_failures;
@@ -3932,7 +3989,6 @@ void load_external_attraction_data_xml(const std::string& attraction_file, const
 
     auto& atom_ctx = g_vpr_ctx.atom();
     // initialize external attraction data in clustering helper context
-    auto& attraction_data = g_vpr_ctx.mutable_cl_helper().external_atom_attraction_data;
 
     pugi::xml_document doc;
     pugiutil::loc_data loc_data;
@@ -3961,7 +4017,6 @@ void load_external_attraction_data_xml(const std::string& attraction_file, const
                 VTR_ASSERT(src_block_id);
                 VTR_ASSERT(dst_block_id);
                 VTR_LOGV(verbosity > 2, "attraction: score: %f, src: %d:%s, dst: %d:%s\n", attraction_score, src_block_id, src_node_name.c_str(), dst_block_id, dst_node_name.c_str());
-                attraction_data[src_block_id][dst_block_id] = attraction_score;
             }
         }
 
@@ -3970,12 +4025,6 @@ void load_external_attraction_data_xml(const std::string& attraction_file, const
     }
 
     VTR_LOGV(verbosity > 2, "\n=============================\n\n");
-
-    for (auto srckv : attraction_data) {
-        for (auto dstkv : srckv.second) {
-            VTR_LOGV(verbosity > 2, "attraction: score: %f, src: %d, dst: %d\n", dstkv.second, srckv.first, dstkv.first);
-        }
-    }
 
     // for (auto& block_id : atom_ctx.nlist.blocks()) {
     //     std::string atom_name = atom_ctx.nlist.block_name(block_id);
@@ -3997,7 +4046,6 @@ void load_external_attraction_data(const std::string& attraction_file, const int
     auto& atom_ctx = g_vpr_ctx.atom();
     // initialize external attraction data in clustering helper context
     auto& cl_helper = g_vpr_ctx.mutable_cl_helper();
-    auto& attraction_data = cl_helper.external_atom_attraction_data;
 
     VTR_LOGV(verbosity > 1, "\nLoading external attracion data\n");
 
@@ -4054,17 +4102,6 @@ void load_external_attraction_data(const std::string& attraction_file, const int
             }
 
             cl_helper.atom_to_attraction_group_map[blk_id] = group_id;
-        }
-    }
-
-    // Now we have all the data, we need to convert it to the format we need
-    for (auto& src_group : cl_helper.scores_btw_attraction_groups) {
-        for (auto& dst_group : src_group.second) {
-            for (auto& src_blk_id : cl_helper.attraction_group_to_blkid[src_group.first]) {
-                for (auto& dst_blk_id : cl_helper.attraction_group_to_blkid[dst_group.first]) {
-                    attraction_data[src_blk_id][dst_blk_id] = dst_group.second;
-                }
-            }
         }
     }
 
