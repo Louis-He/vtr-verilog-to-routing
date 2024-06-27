@@ -62,6 +62,50 @@ int t_pb::get_num_children_of_type(int type_index) const {
     return 0; //No mode
 }
 
+// return true if the pb block or its children have memory blocks
+bool t_pb::has_memory_in_pb_block(int level) const {
+    std::string indent(level, ' ');
+    // VTR_LOG("%shas_parent: %s\n", indent.c_str(), is_root() ? "false" : "true");
+    // VTR_LOG("%sis_primitive: %s\n", indent.c_str(), is_primitive() ? "true" : "false");
+    const t_pb_type* pb_type = pb_graph_node->pb_type;
+    if (pb_type == nullptr) {
+        // VTR_LOG("%spb_type is null\n", indent.c_str());
+        return false;
+    }
+    
+    if (pb_type->class_type == MEMORY_CLASS) {
+        return true;
+    }
+    // VTR_LOG("%spb_type: %s\n", indent.c_str(), pb_type->name);
+    // VTR_LOG("%spb class type: %d\n", indent.c_str(), pb_type->class_type);
+
+    // const t_mode* pb_mode = get_mode();
+    // if (pb_mode == nullptr) {
+    //     return false;
+    // }
+    // VTR_LOG("%snum_modes: %d\n", indent.c_str(), pb_type->num_modes);
+    // VTR_LOG("%smode: %s\n", indent.c_str(), pb_mode->name);
+
+    // print the class type of the pb
+    // VTR_LOG("%sclass_type: %d, num_child_types: %d\n", indent.c_str(), pb_type->class_type, get_num_child_types());
+    int num_child_types = get_num_child_types();
+
+    for (int i = 0; i < num_child_types; i++) {
+        int num_children = get_num_children_of_type(i);
+        // VTR_LOG("%snumber of children of type %d: %d\n", indent.c_str(), i, num_children);
+        for (int j = 0; j < num_children; j++) {
+            t_pb child_pb = child_pbs[i][j];
+            bool has_memory_block = child_pb.has_memory_in_pb_block(level + 1);
+
+            if (has_memory_block) {
+                return true;
+            }
+        }
+    }
+
+    return false;
+}
+
 t_mode* t_pb::get_mode() const {
     if (has_modes()) {
         return &pb_graph_node->pb_type->modes[mode];

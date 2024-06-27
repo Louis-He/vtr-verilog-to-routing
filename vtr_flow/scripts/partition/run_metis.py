@@ -5,12 +5,13 @@ import math
 import xml.etree.ElementTree as ET
 import json
 
-SCORE_MIN_THRESHOLD = -0.32
-LEAST_NUM_NODES_FOR_PARTITION = 20
+SCORE_MIN_THRESHOLD = -0.16
+LEAST_NUM_NODES_FOR_PARTITION = 15
 class METIS_Recursive_Runner:
-    def __init__(self, blocks_file, input_hypergraph) -> None:
+    def __init__(self, blocks_file, input_hypergraph, molecule_file) -> None:
         self.blocks_file = blocks_file
         self.input_hypergraph = input_hypergraph
+        self.molecule_file = molecule_file
         
         self.block_infos = {}
         self.block_paritioned_result = {} # blkname -> partition_id
@@ -47,7 +48,7 @@ class METIS_Recursive_Runner:
         if uncommon_surffix_len > 3:
             return SCORE_MIN_THRESHOLD
             
-        score = (-2 * SCORE_MIN_THRESHOLD) * math.exp(-1/2*uncommon_surffix_len) + SCORE_MIN_THRESHOLD
+        score = (-2 * SCORE_MIN_THRESHOLD) * math.exp(-1/3*uncommon_surffix_len) + SCORE_MIN_THRESHOLD
         return score
     
     def calculate_attraction_score(self, src_name, dst_name, src_partition, dst_partition):
@@ -214,10 +215,11 @@ class METIS_Recursive_Runner:
     def clean_up(self):
         os.system("rm -f *.block_file.metis.txt.*")
         os.system("rm -f *.logical_hypergraph.metis.txt.*")
+        os.system("rm -f *.molecule.metis.txt.*")
         os.system("rm -f metis_default_in.txt*")
 
     # Run this API in the same directory as the input files
-    def run_metis_recursive(self, blocks_file, input_hypergraph, output_graph, graph_model, partition_count, run_count):
+    def run_metis_recursive(self, blocks_file, input_hypergraph, molecule_file, output_graph, graph_model, partition_count, run_count):
         assert(run_count >= 0)
         if (run_count == 0):
             return
@@ -227,7 +229,7 @@ class METIS_Recursive_Runner:
             # print("blocks file %s does not exist" % blocks_file)
             return
 
-        is_exist_edge = runner.dump_metis_input(blocks_file, input_hypergraph, output_graph, graph_model)
+        is_exist_edge = runner.dump_metis_input(blocks_file, input_hypergraph, molecule_file, output_graph, graph_model)
         if not is_exist_edge:
             return
         
@@ -238,11 +240,12 @@ class METIS_Recursive_Runner:
         runner.run_metis(output_graph, partition_count)
         runner.read_metis_output(partition_count, "%s.part.%d" % (output_graph, partition_count))
         self.update_partitioned_result(runner.partioned_blk_name_to_result_map)
-        runner.dump_partitioned_result(partition_count, blocks_file, input_hypergraph)
+        runner.dump_partitioned_result(partition_count, blocks_file, input_hypergraph, molecule_file)
         
         for partition_idx in range(partition_count):
             self.run_metis_recursive("%s.%d" % (blocks_file, partition_idx),
                                      "%s.%d" % (input_hypergraph, partition_idx),
+                                     "%s.%d" % (molecule_file, partition_idx),
                                      "%s.%d" % (output_graph, partition_idx),
                                      graph_model, partition_count, run_count-1)
     
@@ -250,18 +253,19 @@ class METIS_Recursive_Runner:
         if run_count is None:
             run_count = int(math.log2(len(self.block_infos)) / 2)
         print("Start run metis %d times" % run_count)
-        self.run_metis_recursive(self.blocks_file, self.input_hypergraph, self.output_graph, graph_model, partition_count, run_count)
+        self.run_metis_recursive(self.blocks_file, self.input_hypergraph, self.molecule_file, self.output_graph, graph_model, partition_count, run_count)
         # self.write_external_attraction_data_file_xml('json', 'test_attraction_data2.json')
         self.write_external_attraction_data_file_xml('custom_group', 'test_attraction_data.txt')
         print("Successfully run metis %d times" % run_count)
-        if cleanup:
-            self.clean_up()
+        # if cleanup:
+        #     self.clean_up()
 
 def main():
     blocks_file = sys.argv[1]
     input_hypergraph = sys.argv[2]
+    molecule_file = sys.argv[3]
 
-    runner = METIS_Recursive_Runner(blocks_file, input_hypergraph)
+    runner = METIS_Recursive_Runner(blocks_file, input_hypergraph, molecule_file)
     runner.run_metis(2, "star", cleanup=True)
     
 

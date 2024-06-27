@@ -1,17 +1,23 @@
 import sys
 import os
 
+BLOCK_PARTITION_LIMIT = 10
+
 class METIS_Runner:
     def __init__(self) -> None:
         # Data read from the block file
         self.btypes = None
         self.block_to_type = None
+        self.block_type_count = None # count of block (idx in btypes)
         self.block_names = None
         
         # Data read from the hypergraph file
         self.edges_conn = None # list of (net_id, sink_blokcs, net_name)
         self.edges = None
         self.num_vertices = -1
+        
+        # Data read from the molecule file
+        self.molecule_data = None # idx starts from 1
         
         # Data generated from both files
         self.edge_weight = None
@@ -29,11 +35,22 @@ class METIS_Runner:
     def edge_weight_1overf(vertices):
         return 1.0/len(vertices)
     
+    def populate_molecule_info_from_molecule_file(self, molecule_file_path):
+        self.molecule_data = []
+        with open(molecule_file_path, 'r') as f:
+            for line in f:
+                atoms = line.strip().split()
+                atoms = [int(atom) for atom in atoms]
+                if len(atoms) <= 1:
+                    continue
+                self.molecule_data.append(atoms)
+    
     def populate_block_info_from_block_file(self, block_file_path):
         # print("Reading block file %s" % block_file_path)
         assert(self.btypes is None and self.block_to_type is None and self.block_names is None)
         self.btypes = []
         self.block_to_type = []
+        self.block_type_count = []
         self.block_names = []
         with open(block_file_path, 'r') as f:
             for line in f:
@@ -42,22 +59,65 @@ class METIS_Runner:
                 btype = binfo_list[1]
                 if btype not in self.btypes:
                     self.btypes.append(btype)
+                    self.block_type_count.append(0)
                 idx = self.btypes.index(btype)
                 self.block_to_type.append(idx)
-   
+                self.block_type_count[idx] += 1
+
+    def add_bus_edges(self, edges, weights):
+        # group all the vertices if they are in the same bus
+        for molecule in self.molecule_data:
+            # idx starts from zero, but block_idx from vpr starts from 1
+            for i in range(len(molecule)-1):
+                for j in range(i+1, len(molecule)):
+                    edge = (molecule[i]-1, molecule[j]-1)
+                    if edge not in edges:
+                        edges.append(edge)
+                        
+                    if edge in weights:
+                        weights[edge] += 10
+                    else:
+                        weights[edge] = 10
+
     def add_star_edges(self, hedge_parts, edges, weights):
         # add an edge from source to each dest
         for part in hedge_parts[1:]:
             # idx starts from zero, but block_idx from vpr starts from 1
             edge = (hedge_parts[0]-1, part-1)
-            edges.append(edge)
+            if edge not in edges:
+                edges.append(edge)
             
             weight = self.edge_weight_1overf(hedge_parts)
             if edge in weights:
                 weights[edge] += weight
             else:
                 weights[edge] = weight
-        
+
+    def add_neighboring_edges(self, hedge_parts, edges, weights):
+        # add an edge from source to each dest
+        for part in hedge_parts[1:]:
+            # idx starts from zero, but block_idx from vpr starts from 1
+            edge = (hedge_parts[0]-1, part-1)
+            if edge not in edges:
+                edges.append(edge)
+            
+            weight = self.edge_weight_1overf(hedge_parts[1:])
+            if edge in weights:
+                weights[edge] += weight
+            else:
+                weights[edge] = weight
+                
+        # add a ring of edges between all the destination vertices
+        for i in range(1,len(hedge_parts)-1):
+            edge = (hedge_parts[i]-1, hedge_parts[i+1]-1)
+            edges.append(edge)
+            
+            weight = self.edge_weight_1overf(hedge_parts[1:])
+            if edge in weights:
+                weights[edge] += weight
+            else:
+                weights[edge] = weight
+
     def add_clique_edges(self, hedge_parts, edges, weights):
         # for each pair of vertices in this hedge, add an edge
         parts = sorted(hedge_parts)
@@ -65,7 +125,8 @@ class METIS_Runner:
             for j in range(i+1,len(parts)):
                 # idx starts from zero, but block_idx from vpr starts from 1
                 edge = (parts[i]-1,parts[j]-1)
-                edges.append(edge)
+                if edge not in edges:
+                    edges.append(edge)
                 
                 weight = self.edge_weight_1overf(hedge_parts)
                 if edge in weights:
@@ -84,6 +145,8 @@ class METIS_Runner:
             graph_model_fn = self.add_star_edges
         elif graph_model == "clique":
             graph_model_fn = self.add_clique_edges
+        elif graph_model == "neighboring":
+            graph_model_fn = self.add_neighboring_edges
         
         with open(hypergraph_file_path, 'r') as f:
             first_line = True
@@ -117,6 +180,9 @@ class METIS_Runner:
             # print (num_hedges_read)
             assert(num_hedges == num_hedges_read)
             
+        # Pre: Need to load molecule data first before calling this function
+        self.add_bus_edges(edges=self.edges, weights=self.edge_weight)
+            
         # edges map is done. now dump it!
         smallest_edge_weight = None
         # make edge weights integer
@@ -147,11 +213,21 @@ class METIS_Runner:
 
     def dump_to_metis_input(self, output_graph="metis_default_in.txt"):
         edge_count = 0
+        
+        ignored_block_type_idx = []
+        # If certain block num is less than some number, we don't need to balance that type of block
+        for block_type_idx in range(len(self.btypes)):
+            block_count = self.block_type_count[block_type_idx]
+            if block_count < BLOCK_PARTITION_LIMIT:
+                ignored_block_type_idx.append(block_type_idx)
+        
         with open(output_graph,"w") as f:
-            f.write("%d %d 011 %d\n" % (self.num_vertices, len(self.edge_weight), len(self.btypes)))
+            f.write("%d %d 011 %d\n" % (self.num_vertices, len(self.edge_weight), len(self.btypes) - len(ignored_block_type_idx)))
             for vertex_index in range(self.num_vertices):
                 # the vertex weight - what type is it?
                 for i in range(len(self.btypes)):
+                    if i in ignored_block_type_idx:
+                        continue
                     if i == self.block_to_type[vertex_index]:
                         f.write("1 ")
                     else:
@@ -166,9 +242,14 @@ class METIS_Runner:
                 
         return edge_count != 0
 
-    def dump_metis_input(self, blocks_file, input_hypergraph, output_graph, graph_model):
+    def dump_metis_input(self, blocks_file, input_hypergraph, molecule_file, output_graph, graph_model):
         self.populate_block_info_from_block_file(blocks_file)
+        self.populate_molecule_info_from_molecule_file(molecule_file)
+        
+        # Dependency: Need to load molecule data first before calling this function
         self.populate_edge_info_from_hypergraph(input_hypergraph, graph_model)
+        # Add consideration of molecule
+        
         is_exist_edge = self.dump_to_metis_input(output_graph)
         
         return is_exist_edge
@@ -207,7 +288,7 @@ class METIS_Runner:
             self.partioned_blk_name_to_result_map[name] = result
             
 
-    def dump_partitioned_result(self, _partition_num, out_block_file, out_logical_hypergraph_file):
+    def dump_partitioned_result(self, _partition_num, out_block_file, out_logical_hypergraph_file, out_molecule_file):
         assert(self.partition_result is not None)
         partition_num = max(self.partition_result) + 1
         # print(_partition_num, partition_num)
@@ -216,7 +297,7 @@ class METIS_Runner:
         for paritition_id in range(partition_num):
             net_size = 0
             block_size = 0
-            
+           
             with open('%s.%d' % (out_block_file, paritition_id), 'w') as block_out_f:
                 for idx, block in enumerate(self.block_to_type):
                     partition_result = self.partition_result[idx]
@@ -250,9 +331,23 @@ class METIS_Runner:
                 logical_hypergraph_out_f.write("%d %d\n" % (net_size, block_size))
                 logical_hypergraph_out_f.write(block_file_content)
                 
+            with open('%s.%d' % (out_molecule_file, paritition_id), 'w') as molecule_out_f:
+                for molecule in self.molecule_data:
+                    molecule_within_partition = []
+                    for block in molecule:
+                        block = int(block) - 1
+                        # print(block)
+                        if self.partition_result[block] == paritition_id:
+                            assert(block in self.old_block_id_to_new_id_map[paritition_id])
+                            assert(self.old_block_id_to_new_id_map[paritition_id][block] < block_size)
+                            molecule_within_partition.append(str(self.old_block_id_to_new_id_map[paritition_id][block]+1))
+                    if molecule_within_partition:
+                        molecule_out_f.write('%s\n' % ' '.join(molecule_within_partition))
+            
 def main():
     blocks_file = sys.argv[1]
     input_hypergraph = sys.argv[2]
+    molecule_file = sys.argv[3]
     
     if len(sys.argv) < 4:
         output_graph = "metis_default_in.txt"
@@ -261,7 +356,7 @@ def main():
 
     PARTITION_COUNT = 2
     runner = METIS_Runner()
-    runner.dump_metis_input(blocks_file, input_hypergraph, output_graph, "star")
+    runner.dump_metis_input(blocks_file, input_hypergraph, molecule_file, output_graph, "star")
     runner.run_metis(output_graph, PARTITION_COUNT)
     # runner.read_metis_output("%s.part.%d" % (output_graph, PARTITION_COUNT))
     

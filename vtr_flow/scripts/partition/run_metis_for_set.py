@@ -2,19 +2,17 @@ import os
 import subprocess
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-path = "/home/siwei/Developer/vtr-verilog-to-routing/vtr_flow/tasks/regression_tests/vtr_reg_nightly_test3/vtr_reg_qor_chain/run001/"
-copied_path = "/home/siwei/Developer/vtr-verilog-to-routing/vtr_flow/tasks/regression_tests/vtr_reg_nightly_test3/vtr_reg_qor_chain/run022/"
+# Must specify vpr_out_path if SKIP_METIS_RUN is True
+vpr_out_path = "/home/siwei/Developer/vtr-verilog-to-routing/vtr_flow/tasks/regression_tests/vtr_reg_nightly_test3/vtr_reg_qor_chain/run031/"
+path = "/home/siwei/Developer/vtr-verilog-to-routing/vtr_flow/tasks/regression_tests/vtr_reg_nightly_test3/vtr_reg_qor_chain/run036/"
+copied_path = "/home/siwei/Developer/vtr-verilog-to-routing/vtr_flow/tasks/regression_tests/vtr_reg_nightly_test3/vtr_reg_qor_chain/run044"
+SKIP_METIS_RUN = True
 # path = "/home/siwei/Developer/vtr-verilog-to-routing/vtr_flow/tasks/regression_tests/vtr_reg_nightly_test2/titan_quick_qor/run005/"
-# copied_path = "/home/siwei/Developer/vtr-verilog-to-routing/vtr_flow/tasks/regression_tests/vtr_reg_nightly_test2/titan_quick_qor/run006/"
+# copied_path = "/home/siwei/Developer/vtr-verilog-to-routing/vtr_flow/tasks/regression_tests/vtr_reg_nightly_test2/titan_quick_qor/run008/"
 VTR_ROOT = "/home/siwei/Developer/vtr-verilog-to-routing"
 
-# Global lock for synchronizing access to the working directory
-def run_command(command, working_directory):
+def run_vpr_command(command, working_directory):
     try:
-        # Change the working directory if specified
-        # if working_directory:
-        #     os.chdir(working_directory)
-
         # Run the command, capture the output, and get the return code
         command = command.split()
         # print(command)
@@ -30,12 +28,37 @@ def run_command(command, working_directory):
         print(f"Error running command '{command}': {str(e)}")
         return 1  # Return a non-zero code to indicate an error
 
+def run_command(command, working_directory):
+    try:
+        # Run the command, capture the output, and get the return code
+        command = command.split()
+        # print(command)
+        result = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, cwd=working_directory)
+        
+        return result.returncode
+    except Exception as e:
+        # Handle exceptions, if any
+        print(f"Error running command '{command}': {str(e)}")
+        return 1  # Return a non-zero code to indicate an error
+
 dir_list = []
 
 # clean and copy the files to the copied_path
 os.system("rm -rf %s" % (copied_path))
 os.system("cp -r %s %s" % (path, copied_path))
 
+if SKIP_METIS_RUN:
+    # Copy the vpr.out file to the corresponding copied_path
+    for dirpath, dirnames, filenames in os.walk(vpr_out_path):
+        for filename in filenames:
+            if filename.endswith("vpr.out"):
+                # get the relative path of the vpr.out file in the vpr_out_path
+                relative_path = os.path.relpath(os.path.join(dirpath, filename), vpr_out_path)
+                # copy the vpr.out file to the copied_path
+                copy_command = "cp %s %s" % (os.path.join(dirpath, filename), os.path.join(copied_path, relative_path))
+                # print(copy_command)
+                os.system(copy_command)
+                
 # get VPR command-line command from vpr_stdout.log in copied_path
 for dirpath, dirnames, filenames in os.walk(copied_path):
     vpr_command = ""
@@ -59,27 +82,50 @@ for dirpath, dirnames, filenames in os.walk(copied_path):
                 [dirpath, # design folder
                  os.path.join(dirpath, filename), # deign block file path
                  os.path.join(dirpath, filename).replace(".block_file.metis.txt", ".logical_hypergraph.metis.txt"), # design logical hypergraph file path
+                 os.path.join(dirpath, filename).replace(".block_file.metis.txt", ".molecule.metis.txt"),
                  vpr_command, # vpr command
                  os.path.join(dirpath, "test_attraction_data.txt") # partitioned result
                  ])
 
 vpr_command_rerun_list = []
-for directory, block_file, logical_hypergraph_file, vpr_command, partioned_result_file in dir_list:
-    os.chdir(directory)
-    # Run recursive metis
-    
-    os.system("python3 %s/vtr_flow/scripts/partition/run_metis.py %s %s" % (VTR_ROOT, block_file, logical_hypergraph_file))
-    print("Done running recursive metis for " + directory)
-    print()
-    
-    # Construct VPR command with the partitioned result as input
-    # vpr_command += "  --allow_unrelated_clustering on --external_attraction_file %s" % (partioned_result_file)
-    vpr_command += "  --external_attraction_file %s" % (partioned_result_file)
-    # vpr_command += " --allow_unrelated_clustering on"
-    print({"cmd": vpr_command, "dir": directory})
-    vpr_command_rerun_list.append({"cmd": vpr_command, "dir": directory})
-    
-print("Done running recursive metis for all designs")
+partioner_futures = {}
+return_codes = []
+max_partitioner_workers = 16
+if not SKIP_METIS_RUN:
+    with ThreadPoolExecutor(max_workers=max_partitioner_workers) as executor:
+        for directory, block_file, logical_hypergraph_file, molecule_file, vpr_command, partioned_result_file in dir_list:
+            command = "python3 %s/vtr_flow/scripts/partition/run_metis.py %s %s %s" % (VTR_ROOT, block_file, logical_hypergraph_file, molecule_file)
+            future = executor.submit(run_command, command, working_directory=directory)
+            partioner_futures[future] = command
+            
+            print("Start running recursive metis for " + directory)
+            
+            # Construct VPR command with the partitioned result as input
+            # vpr_command += "  --dump_metis_file on"
+            # vpr_command += "  --allow_unrelated_clustering on --external_attraction_file %s" % (partioned_result_file)
+            # vpr_command += "  --external_attraction_file %s" % (partioned_result_file)
+            # vpr_command += " --allow_unrelated_clustering on"
+            print({"cmd": vpr_command, "dir": directory})
+            vpr_command_rerun_list.append({"cmd": vpr_command, "dir": directory})
+            
+        # As commands complete, print their return codes
+        for future in as_completed(partioner_futures):
+            command = partioner_futures[future]
+            try:
+                return_code = future.result()
+                print(f"Command '{command}' finished with return code: {return_code}")
+            except Exception as e:
+                print(f"Error running command '{command}': {str(e)}")
+            finally:
+                return_codes.append((command, return_code))
+        
+    print("Done running recursive metis for all designs")
+else:
+    print("Skip running metis")
+    for directory, block_file, logical_hypergraph_file, molecule_file, vpr_command, partioned_result_file in dir_list:
+        # vpr_command += "  --allow_unrelated_clustering on --external_attraction_file %s" % (partioned_result_file)
+        vpr_command += "  --allow_unrelated_clustering on"
+        vpr_command_rerun_list.append({"cmd": vpr_command, "dir": directory})
 
 # Set the maximum number of threads in the thread pool
 # max_workers = 7
@@ -89,7 +135,7 @@ max_workers = 16
 return_codes = []
 with ThreadPoolExecutor(max_workers=max_workers) as executor:
     # Submit each command to the executor and collect the Future objects
-    futures = {executor.submit(run_command, cmd["cmd"], working_directory=cmd["dir"]): cmd["cmd"] for cmd in vpr_command_rerun_list}
+    futures = {executor.submit(run_vpr_command, cmd["cmd"], working_directory=cmd["dir"]): cmd["cmd"] for cmd in vpr_command_rerun_list}
 
     # As commands complete, print their return codes
     for future in as_completed(futures):

@@ -292,6 +292,8 @@ class t_pb {
 
     int get_num_children_of_type(int type_index) const;
 
+    bool has_memory_in_pb_block(int level) const;
+
     t_mode* get_mode() const;
 
     /**

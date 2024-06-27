@@ -146,6 +146,7 @@ void add_molecule_to_pb_stats_candidates(t_pack_molecule* molecule,
                                          const ClusterBlockId cluster_index,
                                          int max_queue_size,
                                          AttractionInfo& attraction_groups,
+                                         bool is_consider_external_attraction_score,
                                          float external_attraction_default_weight,
                                          float external_attraction_default_value);
 
@@ -185,6 +186,14 @@ t_pack_molecule* get_molecule_by_num_ext_inputs(const int ext_inps,
                                                 const enum e_removal_policy remove_flag,
                                                 t_cluster_placement_stats* cluster_placement_stats_ptr,
                                                 t_molecule_link* unclustered_list_head);
+
+// t_pack_molecule* get_molucule_by_external_attraction_data_involved(t_pb* cur_pb,
+//                                                                  const ClusterBlockId cluster_index,
+//                                                                  t_cluster_placement_stats* cluster_placement_stats_ptr,
+//                                                                  const int feasible_block_array_size,
+//                                                                  AttractionInfo& attraction_groups,
+//                                                                  float external_attraction_default_weight,
+//                                                                  float external_attraction_default_value);
 
 t_pack_molecule* get_free_molecule_with_most_ext_inputs_for_cluster(t_pb* cur_pb,
                                                                     t_cluster_placement_stats* cluster_placement_stats_ptr,
@@ -354,6 +363,7 @@ void start_new_cluster(t_cluster_placement_stats* cluster_placement_stats,
 
 t_pack_molecule* get_highest_gain_molecule(t_pb* cur_pb,
                                            AttractionInfo& attraction_groups,
+                                           bool is_consider_external_attraction_score,
                                            float external_attraction_default_weight,
                                            float external_attraction_default_value,
                                            const enum e_gain_type gain_mode,
@@ -370,6 +380,7 @@ void add_cluster_molecule_candidates_by_connectivity_and_timing(t_pb* cur_pb,
                                                                 t_cluster_placement_stats* cluster_placement_stats_ptr,
                                                                 const int feasible_block_array_size,
                                                                 AttractionInfo& attraction_groups,
+                                                                bool is_consider_external_attraction_score,
                                                                 float external_attraction_default_weight,
                                                                 float external_attraction_default_value);
 
@@ -378,12 +389,14 @@ void add_cluster_molecule_candidates_by_highfanout_connectivity(t_pb* cur_pb,
                                                                 t_cluster_placement_stats* cluster_placement_stats_ptr,
                                                                 const int feasible_block_array_size,
                                                                 AttractionInfo& attraction_groups,
+                                                                bool is_consider_external_attraction_score,
                                                                 float external_attraction_default_weight,
                                                                 float external_attraction_default_value);
 
 void add_cluster_molecule_candidates_by_attraction_group(t_pb* cur_pb,
                                                          t_cluster_placement_stats* cluster_placement_stats_ptr,
                                                          AttractionInfo& attraction_groups,
+                                                         bool is_consider_external_attraction_score,
                                                          float external_attraction_default_weight,
                                                          float external_attraction_default_value,
                                                          const int feasible_block_array_size,
@@ -397,6 +410,7 @@ void add_cluster_molecule_candidates_by_transitive_connectivity(t_pb* cur_pb,
                                                                 int transitive_fanout_threshold,
                                                                 const int feasible_block_array_size,
                                                                 AttractionInfo& attraction_groups,
+                                                                bool is_consider_external_attraction_score,
                                                                 float external_attraction_default_weight,
                                                                 float external_attraction_default_value);
 
@@ -443,7 +457,7 @@ t_pack_molecule* get_highest_gain_seed_molecule(int* seedindex, const std::vecto
 
 float get_molecule_gain(t_pack_molecule* molecule, const ClusterBlockId cluster_index, const std::map<AtomBlockId, float>& blk_gain,
     AttractGroupId cluster_attraction_group_id, AttractionInfo& attraction_groups, 
-    float external_attraction_default_weight, float external_attraction_default_value, int num_molecule_failures);
+    bool is_consider_external_attraction_score, float external_attraction_default_weight, float external_attraction_default_value, int num_molecule_failures);
 
 int compare_molecule_gain(const void* a, const void* b);
 int net_sinks_reachable_in_cluster(const t_pb_graph_pin* driver_pb_gpin, const int depth, const AtomNetId net_id);

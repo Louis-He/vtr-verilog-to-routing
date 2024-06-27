@@ -589,6 +589,23 @@ void dump_metis_file(t_vpr_setup& vpr_setup) {
         // TODO: original code also writes out the name of the block model?
         block_fstream << netlist.block_name(block) << " " << netlist.block_model(block)->name << std::endl;
     }
+
+    // Output molecule file
+    std::string molecule_file = design_name + ".molecule.metis.txt";
+    std::ofstream molecule_fstream;
+    molecule_fstream.open(molecule_file);
+    
+    t_pack_molecule* molecule = atom_ctx.list_of_pack_molecules.get();
+    while(molecule != nullptr) {
+        // molecule_fstream << molecule->num_blocks << " ";
+        for (AtomBlockId id : molecule->atom_block_ids) {
+            if (id != AtomBlockId::INVALID()) {
+                molecule_fstream << static_cast<size_t>(id) + 1 << " ";
+            }
+        }
+        molecule_fstream << std::endl;
+        molecule = molecule->next;
+    }
 }
 
 bool vpr_pack_flow(t_vpr_setup& vpr_setup, const t_arch& arch) {
